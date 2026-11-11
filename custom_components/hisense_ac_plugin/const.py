@@ -192,15 +192,17 @@ MODE_ECO = "eco"
 MODE_BOOST = "boost"
 OPERATION_MODE_ECO  = "eco"
 OPERATION_MODE_VACATION = "vacation"
-# Fan Modes
-FAN_AUTO = "auto"
-FAN_ULTRA_LOW = "ultra_low"
-SFAN_ULTRA_LOW = "中低"
-FAN_LOW = "low"
-FAN_MEDIUM = "medium"
-FAN_HIGH = "high"
-FAN_ULTRA_HIGH = "ultra_high"
-SFAN_ULTRA_HIGH = "中高"
+# Fan Modes (defined in fan_modes.py so they can be tested without Home Assistant)
+from .fan_modes import (  # noqa: E402,F401
+    FAN_AUTO,
+    FAN_ULTRA_LOW,
+    SFAN_ULTRA_LOW,
+    FAN_LOW,
+    FAN_MEDIUM,
+    FAN_HIGH,
+    FAN_ULTRA_HIGH,
+    SFAN_ULTRA_HIGH,
+)
 
 # Message Types
 class MessageType:

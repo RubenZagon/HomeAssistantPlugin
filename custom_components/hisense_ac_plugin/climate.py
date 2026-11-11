@@ -44,6 +44,7 @@ from .coordinator import HisenseACPluginDataUpdateCoordinator
 from .api import HisenseApiClient
 from .models import DeviceInfo as HisenseDeviceInfo
 from .devices import get_device_parser
+from .fan_modes import fan_desc_to_mode
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -293,23 +294,12 @@ class HisenseClimate(CoordinatorEntity, ClimateEntity):
         fan_speed_attr = self._parser.attributes.get(StatusKey.FAN_SPEED)
         if fan_speed_attr and fan_speed_attr.value_map:
             for key, value in fan_speed_attr.value_map.items():
-                # Map Chinese descriptions to standard fan modes
-                if "自动" == value or "auto" == value.lower():
-                    fan_modes.append(FAN_AUTO)
+                # Map Chinese descriptions to standard fan modes; unknown
+                # descriptions keep the raw text as the mode name
+                mode = fan_desc_to_mode(value)
+                if mode == FAN_AUTO:
                     self.hasAuto = True
-                elif "超低" == value or "ultra low" == value.lower():
-                    fan_modes.append(SFAN_ULTRA_LOW)
-                elif "低" == value or "low" == value.lower():
-                    fan_modes.append(FAN_LOW)
-                elif "中" == value or "medium" == value.lower() or "med" == value.lower():
-                    fan_modes.append(FAN_MEDIUM)
-                elif "高" == value or "high" == value.lower():
-                    fan_modes.append(FAN_HIGH)
-                elif "超高" == value or "ultra high" == value.lower():
-                    fan_modes.append(SFAN_ULTRA_HIGH)
-                else:
-                    # Use the Chinese description as the mode name
-                    fan_modes.append(value)
+                fan_modes.append(mode or value)
 
         if fan_modes:
             # 新增逻辑：检查条件并过滤模式
@@ -328,8 +318,9 @@ class HisenseClimate(CoordinatorEntity, ClimateEntity):
         left_and_right = '1'
         upper_and_lower = '1'
         if self.static_data:
-            left_and_right = self.static_data.get("Left_and_right_damper_control")
-            upper_and_lower = self.static_data.get("Upper_and_lower_damper_control")
+            # A missing flag means "supported" (same default as without static data)
+            left_and_right = self.static_data.get("Left_and_right_damper_control", '1')
+            upper_and_lower = self.static_data.get("Upper_and_lower_damper_control", '1')
         swing_modes = [SWING_OFF]
 
         # Check for vertical swing support (t_up_down)
@@ -445,22 +436,9 @@ class HisenseClimate(CoordinatorEntity, ClimateEntity):
                 fan_desc = fan_attr.value_map[fan_mode]
                 _LOGGER.debug("Fan mode %s maps to fan: %s", fan_mode, fan_desc)
 
-                # Map to standard fan modes based on description
-                if "自动" == fan_desc or "auto" == fan_desc.lower():
-                    return FAN_AUTO
-                elif "超低" == fan_desc or "ultra low" == fan_desc.lower():
-                    return SFAN_ULTRA_LOW
-                elif "低" == fan_desc or "low" == fan_desc.lower():
-                    return FAN_LOW
-                elif "中" == fan_desc or "medium" == fan_desc.lower() or "med" == fan_desc.lower():
-                    return FAN_MEDIUM
-                elif "高" == fan_desc or "high" == fan_desc.lower():
-                    return FAN_HIGH
-                elif "超高" == fan_desc or "ultra high" == fan_desc.lower():
-                    return SFAN_ULTRA_HIGH
-                else:
-                    # Use the Chinese description as the mode name
-                    return fan_desc
+                # Map to a standard fan mode; unknown descriptions are
+                # returned as they are
+                return fan_desc_to_mode(fan_desc) or fan_desc
 
         # Fallback to the raw value
         return fan_mode
@@ -515,9 +493,9 @@ class HisenseClimate(CoordinatorEntity, ClimateEntity):
                 | ClimateEntityFeature.TURN_OFF
         )
 
-        # 新增类型检查：仅type为009的设备支持风向功能
-        if self._current_type_code != '009':
-            features &= ~ClimateEntityFeature.SWING_MODE
+        # Swing is offered whenever the device exposes swing modes (checked
+        # below); it used to be limited to type 009, which hid it on portable
+        # air conditioners (type 006)
 
         # 新增逻辑：如果风速模式数量<=1（仅自动模式），则隐藏风速设置
         if len(self._attr_swing_modes) <= 1:
